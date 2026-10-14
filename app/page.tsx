@@ -1,69 +1,252 @@
-import Image from "next/image";
+'use client';
+import { useState, useEffect } from 'react';
+
+interface AdminItem {
+  name: string;
+  group: number;
+}
 
 export default function Home() {
+  const [participants, setParticipants] = useState<string>('');
+  const [groupCount, setGroupCount] = useState<number>(2);
+  const [evenDist, setEvenDist] = useState<boolean>(true);
+  const [numbering, setNumbering] = useState<boolean>(false);
+  const [sortOrder, setSortOrder] = useState<string>('none');
+  const [results, setResults] = useState<string[][]>([]);
+  const [adminData, setAdminData] = useState<AdminItem[]>([]);
+  const [showAdmin, setShowAdmin] = useState<boolean>(false);
+  const [adminName, setAdminName] = useState<string>('');
+  const [adminGroup, setAdminGroup] = useState<number>(1);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('randomizerAdminData');
+    if (saved) setAdminData(JSON.parse(saved));
+    if (typeof window !== 'undefined' && window.location.search.includes('admin=true')) {
+      setShowAdmin(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('randomizerAdminData', JSON.stringify(adminData));
+  }, [adminData]);
+
+  const addToAdmin = () => {
+    if (!adminName.trim()) return alert('Есім енгізіңіз!');
+    setAdminData([...adminData, { name: adminName.trim(), group: parseInt(String(adminGroup)) }]);
+    setAdminName('');
+  };
+
+  const removeFromAdmin = (index: number) => {
+    const newData = [...adminData];
+    newData.splice(index, 1);
+    setAdminData(newData);
+  };
+
+  const distribute = () => {
+    setIsLoading(true);
+    setResults([]);
+
+    setTimeout(() => {
+      let list = participants.split('\n').map((n: string) => n.trim()).filter((n: string) => n);
+      adminData.forEach(item => {
+        if (!list.includes(item.name)) list.push(item.name);
+      });
+      if (list.length === 0) {
+        setIsLoading(false);
+        return alert('Тізім бос!');
+      }
+
+      const groups: string[][] = Array.from({ length: groupCount }, () => []);
+      const remaining: string[] = [...list];
+      adminData.forEach(item => {
+        const idx = item.group - 1;
+        if (idx >= 0 && idx < groupCount) {
+          groups[idx].push(item.name);
+          const pos = remaining.indexOf(item.name);
+          if (pos > -1) remaining.splice(pos, 1);
+        }
+      });
+
+      for (let i = remaining.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [remaining[i], remaining[j]] = [remaining[j], remaining[i]];
+      }
+
+      if (evenDist) {
+        let idx = 0;
+        remaining.forEach((p: string) => {
+          groups[idx].push(p);
+          idx = (idx + 1) % groupCount;
+        });
+      } else {
+        remaining.forEach((p: string) => {
+          const minSize = Math.min(...groups.map(g => g.length));
+          const available = groups.map((g, i) => g.length === minSize ? i : -1).filter(i => i !== -1);
+          const randomIdx = available[Math.floor(Math.random() * available.length)];
+          groups[randomIdx].push(p);
+        });
+      }
+
+      groups.forEach(g => {
+        if (sortOrder === 'alpha') g.sort((a, b) => a.localeCompare(b));
+        if (sortOrder === 'reverse') g.sort((a, b) => b.localeCompare(a));
+      });
+
+      setResults(groups);
+      setIsLoading(false);
+    }, 600);
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <>
+      <div className="floating-icons">
+        <span>✨</span>
+        <span>🎲</span>
+        <span>⚡</span>
+        <span>🎯</span>
+        <span>💫</span>
+      </div>
+
+      <div className="container-main">
+        {!showAdmin ? (
+          <>
+            <h1 className="header-title">Рандомайзер</h1>
+            <p className="header-subtitle">· Раздели участников ·</p>
+
+            <div className="glass p-6" style={{ marginBottom: 20 }}>
+              <label className="label">Список участников</label>
+              <textarea
+                value={participants}
+                onChange={(e) => setParticipants(e.target.value)}
+                placeholder={"Алиби +\nВлад +\nНабиев +\nДаха +"}
+                className="input-field"
+              />
+
+              <div className="mt-6">
+                <label className="label">Топ саны</label>
+                <input
+                  type="number"
+                  value={groupCount}
+                  min="1"
+                  onChange={(e) => setGroupCount(parseInt(e.target.value) || 1)}
+                  className="input-field"
+                />
+              </div>
+
+              <div className="switch-wrapper">
+                <span>Поровну во всех группах</span>
+                <label className="switch">
+                  <input type="checkbox" checked={evenDist} onChange={(e) => setEvenDist(e.target.checked)} />
+                  <span className="slider"></span>
+                </label>
+              </div>
+
+              <div className="switch-wrapper">
+                <span>Порядковые номера</span>
+                <label className="switch">
+                  <input type="checkbox" checked={numbering} onChange={(e) => setNumbering(e.target.checked)} />
+                  <span className="slider"></span>
+                </label>
+              </div>
+
+              <div className="mt-4">
+                <label className="label">Сортировать</label>
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value)}
+                  className="input-field"
+                >
+                  <option value="none">Нет</option>
+                  <option value="alpha">По алфавиту (А-Я)</option>
+                  <option value="reverse">По алфавиту (Я-А)</option>
+                </select>
+              </div>
+
+              <button
+                onClick={distribute}
+                disabled={isLoading}
+                className="btn-primary mt-6"
+                style={{ opacity: isLoading ? 0.7 : 1 }}
+              >
+                {isLoading ? '⏳ Бөлінуде...' : '⚡ Разделить'}
+              </button>
+            </div>
+
+            {results.length > 0 && (
+              <div className="glass p-6">
+                <h2 className="section-title">🎯 Результаты</h2>
+                <div className="results-grid">
+                  {results.map((group, i) => (
+                    <div key={i} className="result-card">
+                      <div className="result-title">{i + 1} группа</div>
+                      {group.length === 0 ? (
+                        <div className="empty-state">Бос</div>
+                      ) : (
+                        group.map((person, j) => (
+                          <div key={j} className="result-item" style={{ animationDelay: `${j * 0.05}s` }}>
+                            {numbering ? `${j + 1}. ` : ''}{person}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="glass admin-panel p-6">
+            <h2 className="admin-title">🛠️ Админ-панель</h2>
+
+            <div className="mb-4">
+              <label className="label">Қатысушы есімі</label>
+              <input
+                value={adminName}
+                onChange={(e) => setAdminName(e.target.value)}
+                placeholder="Аты-жөні"
+                className="input-field"
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="label">Топ нөмірі</label>
+              <input
+                type="number"
+                value={adminGroup}
+                min="1"
+                onChange={(e) => setAdminGroup(parseInt(e.target.value) || 1)}
+                className="input-field"
+              />
+            </div>
+
+            <button onClick={addToAdmin} className="btn-primary">
+              ➕ Қосу
+            </button>
+
+            <h3 className="admin-subtitle">Алдын ала бөлінгендер:</h3>
+            {adminData.length === 0 ? (
+              <p className="empty-state">Әзірге дерек жоқ</p>
+            ) : (
+              adminData.map((item, i) => (
+                <div key={i} className="admin-item">
+                  <span><b>{item.name}</b> <span style={{ color: 'rgba(255,255,255,0.4)' }}>➔</span> Топ {item.group}</span>
+                  <button onClick={() => removeFromAdmin(i)} className="btn-danger">
+                    Өшіру
+                  </button>
+                </div>
+              ))
+            )}
+
+            <button
+              onClick={() => setShowAdmin(false)}
+              className="btn-primary btn-secondary mt-5"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+              ← Артқа
+            </button>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
